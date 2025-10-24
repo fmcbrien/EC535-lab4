@@ -18,14 +18,28 @@ static int __init mytraffic_init(void)
   
   // REQUEST GPIO FOR LEDs
   ret = gpio_request(RED_LED_GPIO, "RED_GPIO");
+  if (ret) {
+    printk(KERN_ERR "Failed to request RED LED GPIO\n");
+    return ret;
+  }
   ret = gpio_request(YELLOW_LED_GPIO, "YELLOW_GPIO");
+  if (ret) {
+    printk(KERN_ERR "Failed to request YELLOW LED GPIO\n");
+    gpio_free(RED_LED_GPIO);
+    return ret;
+  }
   ret = gpio_request(GREEN_LED_GPIO, "GREEN_GPIO");
+  if (ret) {
+    printk(KERN_ERR "Failed to request GREEN LED GPIO\n");
+    gpio_free(RED_LED_GPIO);
+    gpio_free(YELLOW_LED_GPIO);
+    return ret;
+  }
 
   // SET DIRECTION FOR LEDs
   ret = gpio_direction_output(RED_LED_GPIO, 0);
   ret = gpio_direction_output(YELLOW_LED_GPIO, 0);
   ret = gpio_direction_output(GREEN_LED_GPIO, 0);
-  
 
   // SET VALUE FOR LEDs
   gpio_set_value(RED_LED_GPIO, 1);
@@ -45,9 +59,14 @@ static void __exit mytraffic_exit(void)
   gpio_free(RED_LED_GPIO);
   gpio_free(YELLOW_LED_GPIO);
   gpio_free(GREEN_LED_GPIO);
-  
+
+  gpio_free(BTN0_GPIO);
+  gpio_free(BTN1_GPIO);
+
   printk(KERN_INFO "mytraffic module unloaded\n");
 }
 
 module_init(mytraffic_init);
 module_exit(mytraffic_exit);
+
+MODULE_LICENSE("GPL");
