@@ -77,9 +77,17 @@ static int __init mytraffic_init(void)
 
   // Flashing-red
   for(i = 0; i < 15; i++) {
+    gpio_set_value(RED_LED_GPIO, 1);
+    ssleep(CYCLE_TIME);
     gpio_set_value(RED_LED_GPIO, 0);
     ssleep(CYCLE_TIME);
-    gpio_set_value(RED_LED_GPIO, 1);
+  }
+
+  // Flashing-yellow
+  for(i = 0; i < 15; i++) {
+    gpio_set_value(YELLOW_LED_GPIO, 1);
+    ssleep(CYCLE_TIME);
+    gpio_set_value(YELLOW_LED_GPIO, 0);
     ssleep(CYCLE_TIME);
   }
   
