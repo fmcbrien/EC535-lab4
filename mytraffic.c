@@ -4,15 +4,17 @@
 #include <linux/gpio.h>
 #include <linux/gpio/driver.h>
 
-#define RED_LED_GPIO    67  // GPIO PIN FOR RED LED
+#define RED_LED_GPIO 67  // GPIO PIN FOR RED LED
 
-static int mytraffic_init(void)
+static int __init mytraffic_init(void)
 {
+  int ret;
+  
   // REQUEST GPIO FOR LEDs
-  gpio_request(RED_LED_GPIO, "GPIO_67");
+  ret = gpio_request(RED_LED_GPIO, "GPIO_67");
 
   // SET DIRECTION FOR LEDs
-  gpio_direction_output(RED_LED_GPIO, 1);
+  ret = gpio_direction_output(RED_LED_GPIO, 0);
 
   // SET VALUE FOR LEDs
   gpio_set_value(RED_LED_GPIO, 1);
@@ -21,8 +23,9 @@ static int mytraffic_init(void)
   return 0;
 }
 
-static void mytraffic_exit(void)
+static void __exit mytraffic_exit(void)
 {
+  gpio_free(RED_LED_GPIO);
   printk(KERN_INFO "mytraffic module unloaded\n");
 }
 
