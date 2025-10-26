@@ -5,9 +5,9 @@
 
 ## Resources:
 - https://www.kernel.org/doc/html/v5.0/driver-api/gpio/legacy.html
-  *Used to see functions for legacy GPIO useage (not gpiod)
+    Used to see functions for legacy GPIO useage (not gpiod)
 - https://cbtw.tech/insights/from-novice-to-expert-building-robust-linux-character-device-drivers
-  *Used some of these functions to make the character device and read/write to it
+    Used some of these functions to make the character device and read/write to it
 
 
 ## Contributions:
