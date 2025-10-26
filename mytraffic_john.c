@@ -1,3 +1,7 @@
+// SOURCES USED : 
+// GPIO INTERUPTS : https://www.youtube.com/watch?v=oCTNuwO9_FA
+// CHARACTER DEVICE : https://www.youtube.com/watch?v=Zg8tnxR_z94
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -25,9 +29,32 @@
 // FLAGS
 static int mode = 0; // 0 = normal, 1 = red-flashing, 2 = yellow-flashing 
 static int pedestrian_waiting = 0; // 0 = no pedestrian, 1 = pedestrian waiting
+static int light_check = 0; // 0 = no light check, 1 = light check active
+
+void reset_leds(void);
+void all_leds_on(void);
 
 // CHECK IF BUTTON 0 HAS BEEN PRESSED
 static irqreturn_t btn0_isr(int irq, void *dev_id){
+  if (light_check) {
+    return IRQ_HANDLED;
+  }
+  // CHECK IF BOTH BUTTONS ARE PRESSED FOR LIGHTBULB CHECK
+  if (gpio_get_value(BTN0_GPIO) == 1 && gpio_get_value(BTN1_GPIO) == 1){
+    light_check = 1;
+    while (light_check){
+      all_leds_on();
+      if (gpio_get_value(BTN0_GPIO) == 0 && gpio_get_value(BTN1_GPIO) == 0){
+        mode = 0;
+        pedestrian_waiting = 0;
+        light_check = 0;
+      }
+      
+    }
+    //msleep(200); // debounce delay
+    return IRQ_HANDLED;
+  }
+
   printk(KERN_INFO "Button 0 pressed\n");
   mode = (mode + 1) % 3;
   return IRQ_HANDLED;
@@ -35,6 +62,17 @@ static irqreturn_t btn0_isr(int irq, void *dev_id){
 
 // CHECK IF BUTTON 1 HAS BEEN PRESSED
 static irqreturn_t btn1_isr(int irq, void *dev_id){
+  // CHECK IF BOTH BUTTONS ARE PRESSED FOR LIGHTBULB CHECK
+  if (gpio_get_value(BTN0_GPIO) == 1 && gpio_get_value(BTN1_GPIO) == 1){
+    all_leds_on();
+    while (gpio_get_value(BTN0_GPIO) == 1 && gpio_get_value(BTN1_GPIO) == 1){
+      msleep(100); // wait until both buttons are released
+    }
+    mode = 0;
+    pedestrian_waiting = 0;
+    return IRQ_HANDLED;
+  }
+
   printk(KERN_INFO "Button 1 pressed\n");
   pedestrian_waiting = 1;
   return IRQ_HANDLED;
@@ -65,6 +103,12 @@ void reset_leds(void){
   gpio_set_value(RED_LED_GPIO, 0);
   gpio_set_value(YELLOW_LED_GPIO, 0);
   gpio_set_value(GREEN_LED_GPIO, 0);
+}
+
+void all_leds_on(void){
+  gpio_set_value(RED_LED_GPIO, 1);
+  gpio_set_value(YELLOW_LED_GPIO, 1);
+  gpio_set_value(GREEN_LED_GPIO, 1);
 }
 
 // PEDESTRIAN STOP PHASE
@@ -125,8 +169,22 @@ static int __init mytraffic_init(void){
   //int i;
   // int count = 0; // count for which cycle we are on
   while (1){
-  // NORMAL LOOP DEFAULT
-  int count = 0;
+    /*
+    // LIGHT BULB CHECK
+    while(gpio_get_value(BTN0_GPIO) == 1 && gpio_get_value(BTN1_GPIO) == 1){
+      gpio_set_value(RED_LED_GPIO, 1);
+      gpio_set_value(YELLOW_LED_GPIO, 1);
+      gpio_set_value(GREEN_LED_GPIO, 1);
+
+      mode = 0;
+      pedestrian_waiting = 0;
+      reset_leds();
+      mode = 0;
+    }
+    */
+    
+    // NORMAL LOOP DEFAULT
+    int count = 0;
     while (mode == 0){
     //for(i = 0; i < 10; i++) {
       if (count == 0) {
