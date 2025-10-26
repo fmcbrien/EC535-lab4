@@ -4,6 +4,7 @@
 #include <linux/gpio.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/kthread.h>
 
 #define DEVICE_NAME "mytraffic"
 #define DEVICE_MAJOR 61
@@ -18,13 +19,24 @@
 
 #define CYCLE_TIME 1    // CYCLE TIME FOR TRAFFIC CYCLES
 
-// FLAGS
-static int mode = 0; // 0 = normal, 1 = red-flashing, 2 = yellow-flashing
+#define BTN0_IRQ gpio_to_irq(BTN0_GPIO)
+#define BTN1_IRQ gpio_to_irq(BTN1_GPIO)
 
-// CHECK IF BUTTON HAS BEEN PRESSED
-static irqreturn_t btn0_isr(int irq, void *data){
+// FLAGS
+static int mode = 0; // 0 = normal, 1 = red-flashing, 2 = yellow-flashing 
+static int pedestrian_waiting = 0; // 0 = no pedestrian, 1 = pedestrian waiting
+
+// CHECK IF BUTTON 0 HAS BEEN PRESSED
+static irqreturn_t btn0_isr(int irq, void *dev_id){
   printk(KERN_INFO "Button 0 pressed\n");
   mode = (mode + 1) % 3;
+  return IRQ_HANDLED;
+}
+
+// CHECK IF BUTTON 1 HAS BEEN PRESSED
+static irqreturn_t btn1_isr(int irq, void *dev_id){
+  printk(KERN_INFO "Button 1 pressed\n");
+  pedestrian_waiting = 1;
   return IRQ_HANDLED;
 }
 
@@ -48,8 +60,27 @@ int set_input(unsigned int pin){
   return ret;
 }
 
-static int __init mytraffic_init(void)
-{
+// RESET ALL LEDS TO OFF
+void reset_leds(void){
+  gpio_set_value(RED_LED_GPIO, 0);
+  gpio_set_value(YELLOW_LED_GPIO, 0);
+  gpio_set_value(GREEN_LED_GPIO, 0);
+}
+
+// PEDESTRIAN STOP PHASE
+void pedestrian_stop_phase(void){
+  int i;
+  for (i = 0; i < 5; i++) {
+    reset_leds();
+    ssleep(CYCLE_TIME);
+    gpio_set_value(RED_LED_GPIO, 1);
+    gpio_set_value(YELLOW_LED_GPIO, 1);
+    ssleep(CYCLE_TIME);
+  }
+  pedestrian_waiting = 0; // Reset pedestrian waiting flag
+}
+
+static int __init mytraffic_init(void){
   int ret;
 
   printk(KERN_INFO "mytraffic module loaded\n");
@@ -72,57 +103,106 @@ static int __init mytraffic_init(void)
   ret = set_input(BTN0_GPIO);
   ret = set_input(BTN1_GPIO);
   
-  int i;
+  // SET UP INTERRUPTS
+  if (request_irq(BTN0_IRQ,
+                  (irq_handler_t) btn0_isr,
+                  IRQF_TRIGGER_RISING,
+                  "btn0_handler",
+                  NULL) != 0) {
+    printk(KERN_ERR "mytraffic: cannot register IRQ %d\n", BTN0_IRQ);
+    gpio_free(BTN0_GPIO);
+  }
 
-  
-  
-  // Normal loop default
-  int count = 0; // count for which cycle we are on
-  for(i = 0; i < 21; i++) {
-    if (count == 0) {
-      gpio_set_value(RED_LED_GPIO, 0);
-      gpio_set_value(GREEN_LED_GPIO, 1);
-      count ++;
-    } else if (count == 3) {
-      gpio_set_value(GREEN_LED_GPIO, 0);
-      gpio_set_value(YELLOW_LED_GPIO, 1);
-      count ++;
-    } else if (count == 4) {
-      gpio_set_value(YELLOW_LED_GPIO, 0);
-      gpio_set_value(RED_LED_GPIO, 1);
-      count ++;
-    } else if (count == 5) {
-      count = 0;
-    } else {
-      count ++;
+  if (request_irq(BTN1_IRQ,
+                  (irq_handler_t) btn1_isr,
+                  IRQF_TRIGGER_RISING,
+                  "btn1_handler",
+                  NULL) != 0) {
+    printk(KERN_ERR "mytraffic: cannot register IRQ %d\n", BTN1_IRQ);
+    gpio_free(BTN1_GPIO);
+  }
+
+  //int i;
+  // int count = 0; // count for which cycle we are on
+  while (1){
+  // NORMAL LOOP DEFAULT
+  int count = 0;
+    while (mode == 0){
+    //for(i = 0; i < 10; i++) {
+      if (count == 0) {
+        //gpio_set_value(RED_LED_GPIO, 0);
+        reset_leds();
+        if (pedestrian_waiting) {pedestrian_stop_phase();}
+        gpio_set_value(GREEN_LED_GPIO, 1);
+        count ++;
+      } else if (count == 3) {
+        //gpio_set_value(GREEN_LED_GPIO, 0);
+        reset_leds();
+        if (pedestrian_waiting) {pedestrian_stop_phase();}
+        gpio_set_value(YELLOW_LED_GPIO, 1);
+        count ++;
+      } else if (count == 4) {
+        //gpio_set_value(YELLOW_LED_GPIO, 0);
+        reset_leds();
+        if (pedestrian_waiting) {pedestrian_stop_phase();}
+        gpio_set_value(RED_LED_GPIO, 1);
+        count ++;
+      } else if (count == 5) {
+        count = 0;
+      } else {
+        count ++;
+      }
+      ssleep(CYCLE_TIME);
     }
-    ssleep(CYCLE_TIME);
-  }
 
-  // Flashing-red
-  for(i = 0; i < 15; i++) {
-    gpio_set_value(RED_LED_GPIO, 0);
-    ssleep(CYCLE_TIME);
-    gpio_set_value(RED_LED_GPIO, 1);
-    ssleep(CYCLE_TIME);
+    // Flashing-red
+    while (mode == 1){
+      //for(i = 0; i < 10; i++) {
+      // gpio_set_value(GREEN_LED_GPIO, 0);
+      // gpio_set_value(YELLOW_LED_GPIO, 0);
+      // gpio_set_value(RED_LED_GPIO, 0);
+      reset_leds();
+      ssleep(CYCLE_TIME);
+      gpio_set_value(RED_LED_GPIO, 1);
+      ssleep(CYCLE_TIME);
+    }
+
+    // FLASHING-YELLOW
+    while (mode == 2){
+      // gpio_set_value(GREEN_LED_GPIO, 0);
+      // gpio_set_value(YELLOW_LED_GPIO, 0);
+      // gpio_set_value(RED_LED_GPIO, 0);
+      reset_leds();
+      ssleep(CYCLE_TIME);
+      gpio_set_value(YELLOW_LED_GPIO, 1);
+      ssleep(CYCLE_TIME);
+    }
   }
-  
   return 0;
 }
 
 static void __exit mytraffic_exit(void) {
-  gpio_set_value(RED_LED_GPIO, 0);
-  gpio_set_value(YELLOW_LED_GPIO, 0);
-  gpio_set_value(GREEN_LED_GPIO, 0);
+  // gpio_set_value(RED_LED_GPIO, 0);
+  // gpio_set_value(YELLOW_LED_GPIO, 0);
+  // gpio_set_value(GREEN_LED_GPIO, 0);
+  reset_leds();
   
   gpio_free(RED_LED_GPIO);
   gpio_free(YELLOW_LED_GPIO);
   gpio_free(GREEN_LED_GPIO);
+
+  free_irq(BTN0_IRQ, NULL);
+  free_irq(BTN1_IRQ, NULL);
+
+  gpio_free(BTN0_GPIO);
+  gpio_free(BTN1_GPIO);
+  
   printk(KERN_INFO "mytraffic module unloaded\n");
 }
 
 module_init(mytraffic_init);
 module_exit(mytraffic_exit);
+
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Your Name");
